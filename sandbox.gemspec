@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
   s.description = 'And you may ask - how do I work this?'
   s.authors = ["John Campbell"]
   s.email = 'buyjohn@gmail.com'
-  s.files = ["lib/sandbox.rb", "lib/sandbox/httptest.rb"]
+  s.files = ["lib/sandbox.rb", "lib/sandbox/httptest.rb", "lib/sandbox/fileutils.rb","lib/sandbox/xmlparser.rb"]
   s.homepage = 'http://amadeupname.com'
   s.license = 'MIT'
 end
