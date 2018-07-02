@@ -1,7 +1,7 @@
 class Sandbox
 
-  @defaultDataFilename = ".//data.text"
-  @defaultConfigFilename = ".//config.text"
+  @defaultDataFilename = "data.txt"
+  @defaultConfigFilename = "config.txt"
   @defaultUrl = "http://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml"
   
   @rawXMLFromFile = ""
@@ -43,7 +43,7 @@ class Sandbox
     readConfig()
 
     #Request fresh data from the server if it's out of date or doesn't exist
-    if (!checkConfigData(date))
+    if (!checkConfigData(date) || !Fileutils.fileexist(@defaultDataFilename))
       request(getConfig('url'))
     end
 
@@ -88,21 +88,16 @@ class Sandbox
   end
 
   def self.readConfig()
-    data =  Fileutils.readfile(@defaultConfigFilename)
-    #convert the supplied csv data to a hash
-    @configData = {}
-    seplines = data.split(/\n+/)
-    seplines.each{|x| @configData[x.split(',')[0]] = x.split(',')[1]}
-    
+    if (Fileutils.fileexist(@defaultConfigFilename))
+      data =  Fileutils.readfile(@defaultConfigFilename)
+      #convert the supplied csv data to a hash    
+      seplines = data.split(/\n+/)
+      seplines.each{|x| @configData[x.split(',')[0]] = x.split(',')[1]}
+    end
     #set defaults if the values from file don't make sense
-    if (getConfig('url') == '')
-      updateConfig('url', @defaultUrl)
-    end
+    updateConfig('url', @defaultUrl) if getConfig('url') == nil
     #if there's no date for the last read, set it to 1st Jan which will force a re-read
-    if (getConfig('readdate') == '')
-     updateConfig('readdate','2018-01-01') 
-    end
-   
+    updateConfig('readdate','2018-01-01') if getConfig('readdate') == nil     
   end
  
   def self.writeConfigData()
@@ -113,7 +108,9 @@ class Sandbox
 
   def self.checkConfigData(date)    
     #if the date of the last read is before the requested date we need to update our data
-    return false if (date > Date.parse(getConfig('readdate')))          
+    puts getConfig('readdate')
+    return false if getConfig('readdate') == ""
+    #return false if (date > Date.parse(getConfig('readdate')))          
     return true #is this needed? - check.    
   end
 
@@ -123,6 +120,8 @@ class Sandbox
 
   def self.updateConfig(key, value)
     @configData[key] = value
+    puts "adding configData key "+ key + "with value "+value
+    writeConfigData
   end
 
 end

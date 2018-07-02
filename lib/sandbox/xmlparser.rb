@@ -2,53 +2,41 @@ class Sandbox::Xmlparser
 
   def self.processxml(data)    
     #data is raw xml data from file
-    processedxml = removeheader(data)
-    processedxml = removeenvelope(processedxml)
-    #Now we have 30 days data separated by the newline character
-    dataByDate =  processedxml.split("\n")
-    #The data is now in an array with each element representing a single day's data
-    return arrayToHash(dataByDate)
-    #The returned data is a hash (key = date, value = hash (key = country, value = rate))
+    processedxml = convertXMLToArray(data)
+    #Convert to a hash for easier searching: {date=>{currency=>rate}}
+    return arrayToHash(processedxml)
   end  
 
-  def self.removeheader(data)
-    #removes everything before the data
-    return data[data.index('</gesmes:Sender>')+22..-1]
-  end
-
-  def self.removeenvelope(data)
-    return data[0..data.index('</gesmes:Envelope>')-8]
-    #removes the last line 
+  def self.convertXMLToArray(data)
+    dataWithHeaders = XmlSimple.xml_in(data)
+    #dataWithHeaders is a hash. Key 'Cube' returns an array containing the data
+    #Element 0 of this array contains a hash with all the data
+    #Key 'Cube' of this hash returns an array with each element containing data for a single date
+    dataWithoutHeaders = dataWithHeaders['Cube'][0]['Cube']
+    #This is specific to the ECB data source. Would need some way of specifying data format for other sources
   end
 
   def self.arrayToHash(array)
     resulthash = Hash.new
     dayhash = Hash.new
     array.each do
-    #each element of the array contains data for one day.
-      |dateblock| entries = dateblock.gsub("\"",' ').split('<Cube ').reject{|s| s.empty?}
-      dayhash.clear
-      dateValue = ""
-      entries.each do |entry| 
-	#each element of entries contains a country and exchange rate except the first which contains the date
-        #the first element contains the date          
-	if (entry.include?('time'))
-	  dateValue = extractSubstring(entry,6,15)
-	else
-          currencyName = extractSubstring(entry,10,12)
-	  currencyRate = extractSubstring(entry,21,26)
-	  dayhash[currencyName] = currencyRate
-	end
+    #each element contains data for one date. 
+    |data| 
+    dateValue = data['time']	
+    rates = data['Cube']
+      rates.each do
+      #add the rates to dayhash
+      |rate| dayhash[rate['currency']] = rate['rate'] 
       end
-    #All the entries are referenced to EUR so it doesn't appear in the list. To make calculations simpler lets add it here
+    #EUR isn't included because all the currencies are referenced to it. 
+    #Add it here to make later calculations easier
     dayhash['EUR'] = '1.0000'
     resulthash[dateValue] = dayhash    
     end
   return resulthash
   end
 
-  def self.extractSubstring(data,from,to)
-    return data[from..to]
-  end
 end
+
+require 'xmlsimple'
 
