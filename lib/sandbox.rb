@@ -1,5 +1,6 @@
+require "sandbox/fileutils"
 class Sandbox
-
+  include Fileutils
   @defaultDataFilename = "data.txt"
   @defaultConfigFilename = "config.txt"
   @defaultUrl = "http://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml"
@@ -11,12 +12,14 @@ class Sandbox
   def self.request(url = @defaultUrl)    
     done = false 
     loopCount = 0
-    while !done do
-      httptest = Httptest.new(url)
+    httptest = Httptest.new(url)
+    puts "retrieving fresh data from server"
+    #try three times to get the data
+    while !done do      
       httptest.sendrequest
       if (httptest.getresponsecode == 200)      
         #only updates the stored data if a valid response is received      
-        Fileutils.writefile(httptest.getresponsebody,@defaultDataFilename)
+        Fileutils::Writefile(httptest.getresponsebody,@defaultDataFilename)
         updateConfig('readdate', Date.today.strftime("%Y-%m-%d"))
         updateConfig('url',url)
         updateConfig('readurl',url)
@@ -35,29 +38,54 @@ class Sandbox
   def self.at(date,base,counter)
 
     #first, validate the date, base and counter currencies.
-    validateDate(date)
-    validateCurrency(base)
+    return 0 if (!dateValid(date)) #check supplied date is within range. If not return 0 indicating error
+    validateCurrency(base) 
     validateCurrency(counter)
 
     #Read the config file into the @configData hash
     readConfig()
 
     #Request fresh data from the server if it's out of date or doesn't exist
-    if (!checkConfigData(date) || !Fileutils.fileexist(@defaultDataFilename))
+    if (!checkConfigData(date) || !Fileutils::Fileexist(@defaultDataFilename))
       request(getConfig('url'))
-    end
+    end    
 
     #We always get the conversion data from our stored file
-    @RawXMLFromFile = Fileutils.readfile(@defaultDataFilename)      
+    @RawXMLFromFile = Fileutils::Readfile(@defaultDataFilename)      
     @fxData = Xmlparser.processxml(@RawXMLFromFile)
-    #After all this we have a hash we can query for the date and then the conversion
+    
+    #The data from the source is not updated until 12 noon and isn't updated at all at weekends. 
+    #We don't want to return 0 for weekends
+    #We should adjust the date to be the nearest date for which data exists
+    if (!dataExists(date))
+      date = adjustDate(date)
+      return 0 if (!dateValid(date)) 
+    end
+    
     baseRate = getRate(date, base)
     counterRate = getRate(date, counter)   
     return getConversion(baseRate,counterRate)
 
   end
 
+  def self.dataExists(date)
+    dateKey = date.strftime("%Y-%m-%d")
+    return (@fxData.has_key?(dateKey))
+  end
+
+  def self.adjustDate(date)
+    done = false
+    while (!done) do
+      #we decrement date until either we find data or the date is invalid
+      date -= 1
+      done = dataExists(date) || !dateValid(date) 
+    end
+  puts "adjusted date to "+date.strftime("%Y-%m-%d")
+  return date
+  end
+
   def self.getRate(date, currency)
+    #we should have already checked that the date has valid data, but another check here does no harm.
     dateKey = date.strftime("%Y-%m-%d")
     if (@fxData.has_key?(dateKey))
       return @fxData[dateKey][currency]
@@ -68,14 +96,14 @@ class Sandbox
 
   def self.getConversion(from, to)
     if (from == "" || to == "")
-      return 0 #returning zero may not be ideal but probably better than returning nil
+      return 0 #returning zero not ideal but better than returning nil and indicates problem
     else
       return (to.to_f / from.to_f).round(4)
     end 
   end
 
-  def self.validateDate(date)
-    return false if (date > Date.today || date < Date.today - 29)    
+  def self.dateValid(date)
+    return (date <= Date.today && date >= Date.today - 89)    
   end
 
   def self.validateCurrency(currency)
@@ -88,8 +116,8 @@ class Sandbox
   end
 
   def self.readConfig()
-    if (Fileutils.fileexist(@defaultConfigFilename))
-      data =  Fileutils.readfile(@defaultConfigFilename)
+    if (Fileutils::Fileexist(@defaultConfigFilename))
+      data =  Fileutils::Readfile(@defaultConfigFilename)
       #convert the supplied csv data to a hash    
       seplines = data.split(/\n+/)
       seplines.each{|x| @configData[x.split(',')[0]] = x.split(',')[1]}
@@ -103,14 +131,14 @@ class Sandbox
   def self.writeConfigData()
     dataToWrite = ''
     @configData.each {|key,value| dataToWrite += key + "," + value + "\n"}
-    Fileutils.writefile(dataToWrite,@defaultConfigFilename)
+    Fileutils::Writefile(dataToWrite,@defaultConfigFilename)
   end
 
   def self.checkConfigData(date)    
     #if the date of the last read is before the requested date we need to update our data
-    puts getConfig('readdate')
     return false if getConfig('readdate') == ""
-    #return false if (date > Date.parse(getConfig('readdate')))          
+    return false if (date > Date.parse(getConfig('readdate')))          
+    return false if (getConfig('url') != getConfig('readurl'))
     return true #is this needed? - check.    
   end
 
@@ -120,13 +148,11 @@ class Sandbox
 
   def self.updateConfig(key, value)
     @configData[key] = value
-    puts "adding configData key "+ key + "with value "+value
     writeConfigData
   end
 
 end
 
 require "sandbox/httptest"
-require "sandbox/fileutils"
 require "sandbox/xmlparser"
 
