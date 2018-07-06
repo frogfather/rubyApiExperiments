@@ -5,7 +5,7 @@ class Sandbox
   @defaultConfigFilename = "config.txt"
   @defaultUrl = "http://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml"
   
-  @rawXMLFromFile = ""
+  @DataFromFile = ""
   @configData = {}
   @fxData = {}
 
@@ -51,17 +51,15 @@ class Sandbox
     end    
 
     #We always get the conversion data from our stored file
-    @RawXMLFromFile = Fileutils::Readfile(@defaultDataFilename)      
-    @fxData = Xmlparser.processxml(@RawXMLFromFile)
-    
+    @DataFromFile = Fileutils::Readfile(@defaultDataFilename)  
+    @fxData = Xmlparser.processDataFromFile(@DataFromFile)
     #The data from the source is not updated until 12 noon and isn't updated at all at weekends. 
     #We don't want to return 0 for weekends
     #We should adjust the date to be the nearest date for which data exists
     if (!dataExists(date))
       date = adjustDate(date)
       return 0 if (!dateValid(date)) 
-    end
-    
+    end     
     baseRate = getRate(date, base)
     counterRate = getRate(date, counter)   
     return getConversion(baseRate,counterRate)
@@ -113,6 +111,7 @@ class Sandbox
   def self.updateUrl(url)
     updateConfig('url',url)
     writeConfigData
+    puts "data source updated to "+url
   end
 
   def self.readConfig()
